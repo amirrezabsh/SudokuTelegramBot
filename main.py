@@ -557,7 +557,6 @@ def menu(message):
                              total_rank) + "\n\nامتیاز هفت روز اخیر " + past_seven_days_points + "\n🔰 رتبه هفت روز اخیر 👈 " + past_seven_days_rank + "\n\nاسپانسر @TRexGames",
                          reply_markup=markup)
     elif message.text == "🛒 فروشگاه":
-        users_coll.update_many({}, [{"$set": {"coins": 100}}])
         text = '🛒 فروشگاه\n\n📚هر راهنمای جارو  یا جهش  5 سکه نیاز دارد\n\n👇برای خرید سکه یکی از موارد زیر را ' \
                'انتخاب نمایید👇 '
         markup = types.InlineKeyboardMarkup(row_width=1).add(
