@@ -20,6 +20,8 @@ db = client["sudoku"]
 games_coll = db.get_collection("games")
 users_coll = db.get_collection("users")
 pays_coll = db.get_collection("pays")
+moves_coll = db.get_collection("moves")
+
 prices = {
     "40": 5000,
     "100": 11000,
@@ -28,7 +30,11 @@ prices = {
     "1000": 69000
 }
 
-
+WEBHOOK_HOST = 'localhost'
+WEBHOOK_PORT = 20000  # 443, 80, 88 or 8443 (port need to be 'open')
+WEBHOOK_URL_PATH = "/%s/" % (API_KEY)
+WEBHOOK_URL_BASE = "https://%s:%s" % (WEBHOOK_HOST, WEBHOOK_PORT)
+# bot.remove_webhook()
 
 SAMPLE = [[1, 5, 2, 6, 3, 4],
           [4, 3, 6, 1, 2, 5],
@@ -47,7 +53,7 @@ LEVELS = [50, 105, 165, 231, 304, 384, 472, 569, 676, 793, 922, 1064, 1220, 1392
           3213838, 3535275, 3888856, 4277795, 4705628, 5176245, 5693923, 6263369, 6889760]
 
 
-
+# bot.set_webhook(url="https://sudoku.appteams.ir/api/v1.1/telegram-web-hook")
 
 
 def check_column(sudoku, tmp, j):
@@ -179,7 +185,7 @@ def get_total_rank(users, id):
         elif previous_point != user["total_point"]:
             previous_point = user["total_point"]
             previous_rank += 1
-        if user["_id"] == id:
+        if str(user["_id"]) == str(id):
             return previous_rank
     return ''
 
@@ -256,7 +262,7 @@ def create_keyboards(sudoku, game_id):
     return types.InlineKeyboardMarkup(keyboards)
 
 
-def create_finish_keyboards(sudoku):
+def create_finish_keyboards(sudoku, mode):
     keyboards = []
     for i, row in enumerate(sudoku):
         keyboards_row = []
@@ -274,8 +280,12 @@ def create_finish_keyboards(sudoku):
                 keyboards_row.append(
                     InlineKeyboardButton(return_character(number), url="t.me/MiniSudokuBot"))
         keyboards.append(keyboards_row)
+    if mode == 'single':
+        again = InlineKeyboardButton('🔁 دوباره', callback_data="again single")
+    else:
+        again = InlineKeyboardButton('🔁 دوباره', switch_inline_query_current_chat="")
     keyboards.append([InlineKeyboardButton('🛒 فروشگاه', callback_data='shop'),
-                      InlineKeyboardButton('🔁 دوباره', switch_inline_query_current_chat="")])
+                      again])
     keyboards.append([InlineKeyboardButton(' 🤝 بازی با دوستانم(گروه، کانال و ...) 🤝', switch_inline_query="")])
     keyboards.append([InlineKeyboardButton('🎮🟡 بازیهای تیرکس 🟡🎮', url='https://t.me/TRexGames/599')])
     return types.InlineKeyboardMarkup(keyboards)
@@ -317,23 +327,24 @@ def create_sudoku(game_id, type):
 
 
 def single_player_sudoku(message, game_id):
-    bot.send_message(message.chat.id,
+    bot.send_message(message.from_user.id,
                      "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 بازی انفرادی\n\n🔰امتیازات\n" + create_text(
-                         games_coll.find_one({"_id": ObjectId(game_id)})["users"]) + '\n🤖@MiniSudokuBot',
+                         games_coll.find_one({"_id": ObjectId(game_id)})["users"], str(game_id)) + '\n🤖@MiniSudokuBot',
                      reply_markup=create_sudoku(game_id, 'e'))
 
 
-def create_text(users):
+def create_text(users, game_id):
     text = ''
     points = {}
     for i in users:
-        if len(users[i]["moves"]) == 0:
-            points[i] = 0
+        moves = moves_coll.find_one({"user_id": i["user_id"], "game_id": ObjectId(game_id)})["moves"]
+        if len(moves) == 0:
+            points[i["user_id"]] = 0
         else:
             point = 0
-            for x in users[i]["moves"]:
+            for x in moves:
                 point += x["point"]
-            points[i] = point
+            points[i["user_id"]] = point
     points = dict(sorted(points.items(), key=lambda x: x[1], reverse=True))
     previous_point = next(iter(points.values()))
     previous_rank = 1
@@ -350,7 +361,7 @@ def create_text(users):
             previous_rank += 1
             for x in str(previous_rank):
                 line += return_character(int(x))
-        line += u'\u200e'+ user["first_name"] + '  🎖' + u'\u200e'+ str(user["total_rank"]) + '\n' + "🔰" + str(points[id]) + '  〽️' + str(
+        line += user["first_name"] + '  🎖' + str(user["total_rank"]) + '\n' + "🔰" + str(points[id]) + '  〽️' + str(
             user["level"]) + "\n\n"
         text = line + text
         if i >= 25:
@@ -360,7 +371,7 @@ def create_text(users):
 
 
 def games_count(user_id):
-    count = games_coll.count_documents({"users." + str(user_id): {"$exists": True}})
+    count = games_coll.count_documents({"users.user_id": str(user_id)})
     return str(count)
 
 
@@ -368,70 +379,71 @@ def get_past_seven_rank(games, user_id):
     points = {}
     for game in games:
         for user in game["users"]:
-            for move in game["users"][user]["moves"]:
-                if user not in points:
-                    points[user] = 0
-                else:
-                    points[user] += move["point"]
+            if user["user_id"] not in points:
+                points[user["user_id"]] = user["point"]
+            else:
+                points[user["user_id"]] += user["point"]
     points = dict(sorted(points.items(), key=lambda x: x[1], reverse=True))
     if user_id not in list(points.keys()):
         return ''
     return str(list(points.keys()).index(user_id) + 1)
 
 
-def get_past_seven_points(moves, user_id):
+def get_element(id, arr, index_str):
+    return next((item for item in arr if item[index_str] == id), None)
+
+
+def get_past_seven_points(games, user_id):
     point = 0
-    for move_arr in moves:
-        for i in move_arr["users"][user_id]["moves"]:
-            point += i["point"]
+    for game in games:
+        point += get_element(user_id, game['users'], "user_id")["point"]
     return str(point)
 
 
 def update_profiles(users, game_id):
-    print('ended!-4-1 ' + str(game_id))
     for i in users:
-        total_points = users_coll.find_one({"_id": int(i)})["total_point"]
-        print('ended!-4-2 ' + str(game_id))
-        for point in users[i]["moves"]:
-            total_points += point["point"]
-        print('ended!-4-2-1 ' + str(game_id))
-        users_coll.update_one({"_id": int(i)}, {"$set": {"total_point": total_points}})
-        print('ended!-4-2-2 ' + str(game_id))
+        total_points = users_coll.find_one({"_id": int(i["user_id"])})["total_point"]
+        moves = moves_coll.find_one({"user_id": i["user_id"], "game_id": ObjectId(game_id)})["moves"]
+        points = 0
+        for point in moves:
+            points += point["point"]
+        games_coll.update_one({"_id": ObjectId(game_id), "users.user_id": i["user_id"]}, {"$set": {
+            "users.$.point": points
+        }})
+        total_points += points
+        users_coll.update_one({"_id": int(i["user_id"])}, {"$set": {"total_point": total_points}})
         for j, level in enumerate(LEVELS):
-            print('ended!-4-2-3 ' + str(game_id))
             if total_points < level:
-                print('ended!-4-2-4 ' + str(game_id))
-                if users_coll.find_one({"_id": int(i)})["level"] < (j):
-                    print('ended!-4-2-5 ' + str(game_id))
+                if users_coll.find_one({"_id": int(i["user_id"])})["level"] < j:
                     try:
-                        bot.send_message(chat_id=int(i), text="💪ایول " + users_coll.find_one({"_id": int(i)})[
-                            "first_name"] + "\nتبریک!🎊  سطح شما به " + str(
-                            j) + " ارتقا یافت و 10 سکه هدیه گرفتی\n🕺🕺💃💃")
-                        print('ended!-4-2-6 ' + str(game_id))
-                        users_coll.update_one({"_id": int(i)},
-                                              {"$set": {"total_point": total_points, "level": (j)},
-                                               "$inc": {"coins": 10}})
+                        bot.send_message(chat_id=int(i["user_id"]),
+                                         text="💪ایول " + users_coll.find_one({"_id": int(i["user_id"])})[
+                                             "first_name"] + "\nتبریک!🎊  سطح شما به " + str(
+                                             j) + " ارتقا یافت و 10 سکه هدیه گرفتی\n🕺🕺💃💃")
+
                     except Exception as e:
                         print(e)
-                    print('ended!-4-2-7 ' + str(game_id))
+                    users_coll.update_one({"_id": int(i["user_id"])},
+                                          {"$set": {"total_point": total_points, "level": j},
+                                           "$inc": {"coins": 10}})
                 break
-    print('ended!-4-3 ' + str(game_id))
     for i in users:
-        users_coll.update_one({"_id": int(i)}, {
-            "$set": {"total_rank": get_total_rank(users_coll.find().sort("total_point", -1), int(i))}})
-    print('ended!-4-4 ' + str(game_id))
+        users_coll.update_one({"_id": int(i["user_id"])}, {
+            "$set": {"total_rank": get_total_rank(users_coll.find({}).sort("total_point", -1), i["user_id"])}})
 
 
 def get_total_ranking(users):
     text = 'رنکینگ امتیاز کل\n\n'
     counter = 1
     for i, user in enumerate(users):
+        # print(user)
         if user["total_rank"] == '':
             counter -= 1
             continue
-        text += u'\u200e' + str(counter) + ". " + u'\u200e' + user["first_name"] + '  ' + u'\u200e' + str(
-            user["total_point"]) + '\n'
+        text += u'\u200e' + str(counter) + ". " + user["first_name"] + '  ' + str(user["total_point"]) + '\n'
         counter += 1
+        if counter == 51:
+            break
     text += '\n🤖 @MiniSudokuBot\n📣 @TRexGames'
     return text
 
@@ -440,20 +452,65 @@ def get_seven_ranking(games):
     points = {}
     for game in games:
         for user in game["users"]:
-            for move in game["users"][user]["moves"]:
-                if user not in points:
-                    points[user] = 0
+            try:
+                if user["user_id"] not in points:
+                    points[user["user_id"]] = user["point"]
                 else:
-                    points[user] += move["point"]
+                    points[user["user_id"]] += user["point"]
+            except Exception as e:
+                pass
     points = dict(sorted(points.items(), key=lambda x: x[1], reverse=True))
     text = 'رنکینگ هفت روز اخیر\n\n'
+    counter = 0
     for i, user in enumerate(points):
-        if users_coll.find_one({"_id": int(user)}):
-            text += u'\u200e' + str(i + 1) + ". " + u'\u200e' + \
-                    users_coll.find_one({"_id": int(user)}, {"first_name": 1})[
-                        "first_name"] + '   ' + u'\u200e' + str(points[user]) + "\n"
+        user_prof = users_coll.find_one({"_id": int(user)})
+        if user_prof is not None:
+            text += u'\u200e' + str(i + 1) + ". " + user_prof["first_name"] + '   ' + str(points[user]) + "\n"
+            counter += 1
+        if counter == 50:
+            break
     text += '\n🤖 @MiniSudokuBot\n📣 @TRexGames'
     return text
+
+
+def insert_game(message, type, mode):
+    game_id = games_coll.insert_one(
+        {"mode": mode, "type": type, "is_complete": False, "date": datetime.today().replace(microsecond=0),
+         "users": [{"user_id": str(message.from_user.id), "jump": False,
+                    "broom": False, "use_broom": False}]}).inserted_id
+    moves_coll.insert_one({"game_id": game_id, "user_id": str(message.from_user.id), "moves": []})
+    return game_id
+
+
+@bot.message_handler(commands=['update'])
+def update(message):
+    if message.from_user.id != 396539934:
+        return
+    bot.send_message(message.from_user.id, "started!")
+    games_coll.update_many({"$expr": {
+        "$eq": ["$sudoku", "$randomized_sudoku"]
+    }
+    }, {
+        "$set": {
+            "is_complete": True
+        }
+    })
+    games = games_coll.find(
+        {"is_complete": True, "date": {"$gte": datetime.today().replace(microsecond=0) - timedelta(7)}})
+    for game in games:
+        for user_stat in game["users"]:
+            try:
+                moves = moves_coll.find_one({"game_id": game["_id"], "user_id": user_stat["user_id"]})["moves"]
+                point = 0
+                for i in moves:
+                    point += i["point"]
+                games_coll.update_one({"_id": game["_id"], "users.user_id": user_stat["user_id"]}, {"$set": {
+                    "users.$.point": point
+                }})
+            except Exception as e:
+                print(e)
+                pass
+    bot.send_message(message.from_user.id, "done!")
 
 
 @bot.message_handler(commands=['start'])
@@ -475,7 +532,8 @@ def start(message):
         if len(message.from_user.first_name) > 20:
             message.from_user.first_name = message.from_user.first_name[0:20]
         users_coll.insert_one(
-            {"_id": message.from_user.id, "first_name": message.from_user.first_name, "total_point": 0, "coins": 20,
+            {"_id": message.from_user.id, "first_name": message.from_user.first_name, "total_point": 0,
+             "coins": 20,
              "level": 0, "total_rank": ''})
     except Exception as e:
         print(e)
@@ -497,7 +555,8 @@ def menu(message):
         if len(message.from_user.first_name) > 20:
             message.from_user.first_name = message.from_user.first_name[0:20]
         users_coll.insert_one(
-            {"_id": message.from_user.id, "first_name": message.from_user.first_name, "total_point": 0, "coins": 20,
+            {"_id": message.from_user.id, "first_name": message.from_user.first_name, "total_point": 0,
+             "coins": 20,
              "level": 0, "total_rank": ''})
     except Exception as e:
         print(e)
@@ -509,10 +568,7 @@ def menu(message):
                              "کاربر " + message.from_user.first_name + "\nبرای ساخت بازی ابتدا عضو کانال زیر شوید 👇\n@TRexGames",
                              reply_markup=markup)
             return
-        game_id = games_coll.insert_one(
-            {"mode": "single", "type": "easy", "is_complete": 0, "date": datetime.today().replace(microsecond=0),
-             "users": {str(message.from_user.id): {"moves": [], "username": message.from_user.first_name, "jump": 0,
-                                                   "broom": 0, "use_broom": 0}}}).inserted_id
+        game_id = insert_game(message, "easy", "single")
         single_player_sudoku(message, game_id)
     elif message.text == "🤝 بازی چند نفره":
         if bot.get_chat_member(-1001319848880, message.from_user.id).status == 'left':
@@ -529,7 +585,7 @@ def menu(message):
         user = users_coll.find_one({"_id": message.from_user.id})
         text = 'پروفایل\n\n' + '👤نام   👈 ' + user["first_name"] + '\n💎سطح  👈 ' + str(
             user["level"]) + '\n🔰 تعداد بازی  👈 ' + str(games_coll.count_documents(
-            {"users." + str(message.from_user.id): {"$exists": True}})) + '\n〽️ امتیاز تا سطح بعد  👈 ' + str(
+            {"users.user_id": str(message.from_user.id)})) + '\n〽️ امتیاز تا سطح بعد  👈 ' + str(
             LEVELS[user["level"]] - user["total_point"]) + '\n🎖 رتبه 👈 ' + str(user["level"]) + '\n💰سکه 👈 ' + str(
             user["coins"]) + '\n\nاسپانسر @TRexGames'
         bot.send_message(chat_id=message.chat.id, text=text)
@@ -541,21 +597,23 @@ def menu(message):
 
         past_seven_days_points = get_past_seven_points(
             games_coll.find({"date": {"$gte": datetime.today().replace(microsecond=0) - timedelta(7)}, "mode": "multi",
-                             "users." + str(message.from_user.id): {"$exists": True}},
-                            {"users." + str(message.from_user.id) + ".moves": 1}), str(message.from_user.id))
+                             "users.user_id": str(message.from_user.id), "is_complete": True}, {"users": 1}),
+            str(message.from_user.id))
         past_seven_days_rank = get_past_seven_rank(games_coll.find(
-            {"date": {"$gte": datetime.today().replace(microsecond=0) - timedelta(7)}, "mode": "multi"}, {"users": 1}),
+            {"date": {"$gte": datetime.today().replace(microsecond=0) - timedelta(7)}, "mode": "multi",
+             "is_complete": True},
+            {"users": 1}),
             str(message.from_user.id))
 
         markup = types.InlineKeyboardMarkup(row_width=2).add(
             types.InlineKeyboardButton('رنکینگ هفت روز اخیر', callback_data="seven ranking"),
             types.InlineKeyboardButton('رنکینگ کل', callback_data="total ranking"))
-
         bot.send_message(chat_id=message.chat.id,
                          text='قهرمانان\n\n' + '👤نام   👈 ' + message.from_user.first_name + '\n\nامتیاز کل  👈 ' +
                               str(user["total_point"]) + "\n🔰رتبه کل  👈 " + str(
                              total_rank) + "\n\nامتیاز هفت روز اخیر " + past_seven_days_points + "\n🔰 رتبه هفت روز اخیر 👈 " + past_seven_days_rank + "\n\nاسپانسر @TRexGames",
                          reply_markup=markup)
+
     elif message.text == "🛒 فروشگاه":
         text = '🛒 فروشگاه\n\n📚هر راهنمای جارو  یا جهش  5 سکه نیاز دارد\n\n👇برای خرید سکه یکی از موارد زیر را ' \
                'انتخاب نمایید👇 '
@@ -582,35 +640,23 @@ def handler(message):
             reply_markup=markup)
         return
     if message.result_id == '6x6h':
-        games_id = games_coll.insert_one(
-            {"mode": "multi", "type": "hard", "is_complete": 0, "creator": str(message.from_user.id),
-             "date": datetime.today().replace(microsecond=0),
-             "users": {str(message.from_user.id): {"moves": [], "username": message.from_user.first_name, "jump": 0,
-                                                   "broom": 0, "use_broom": 0}}}).inserted_id
+        game_id = insert_game(message, "hard", "multi")
         text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 سطح سخت\n\n🔰امتیازات\n" + create_text(
-            games_coll.find_one({"_id": games_id})["users"]) + '\n🤖@MiniSudokuBot'
+            games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
         bot.edit_message_text(text=text, inline_message_id=message.inline_message_id,
-                              reply_markup=create_sudoku(games_id, 'h'))
+                              reply_markup=create_sudoku(game_id, 'h'))
     elif message.result_id == '6x6e':
-        games_id = games_coll.insert_one(
-            {"mode": "multi", "type": "easy", "is_complete": 0, "creator": str(message.from_user.id),
-             "date": datetime.today().replace(microsecond=0),
-             "users": {str(message.from_user.id): {"moves": [], "username": message.from_user.first_name, "jump": 0,
-                                                   "broom": 0, "use_broom": 0}}}).inserted_id
+        game_id = insert_game(message, "easy", "multi")
         text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 سطح آسان\n\n🔰امتیازات\n" + create_text(
-            games_coll.find_one({"_id": games_id})["users"]) + '\n🤖@MiniSudokuBot'
+            games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
         bot.edit_message_text(text=text, inline_message_id=message.inline_message_id,
-                              reply_markup=create_sudoku(games_id, 'e'))
+                              reply_markup=create_sudoku(game_id, 'e'))
     elif message.result_id == '6x6m':
-        games_id = games_coll.insert_one(
-            {"mode": "multi", "type": "medium", "is_complete": 0, "creator": str(message.from_user.id),
-             "date": datetime.today().replace(microsecond=0),
-             "users": {str(message.from_user.id): {"moves": [], "username": message.from_user.first_name, "jump": 0,
-                                                   "broom": 0, "use_broom": 0}}}).inserted_id
+        game_id = insert_game(message, "medium", "multi")
         text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 سطح متوسط\n\n🔰امتیازات\n" + create_text(
-            games_coll.find_one({"_id": games_id})["users"]) + '\n🤖@MiniSudokuBot'
+            games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
         bot.edit_message_text(text=text, inline_message_id=message.inline_message_id,
-                              reply_markup=create_sudoku(games_id, 'm'))
+                              reply_markup=create_sudoku(game_id, 'm'))
 
 
 @bot.inline_handler(func=lambda query: True)
@@ -620,7 +666,8 @@ def inline_handler(message):
         if len(message.from_user.first_name) > 20:
             message.from_user.first_name = message.from_user.first_name[0:20]
         users_coll.insert_one(
-            {"_id": message.from_user.id, "first_name": message.from_user.first_name, "total_point": 0, "coins": 20,
+            {"_id": message.from_user.id, "first_name": message.from_user.first_name, "total_point": 0,
+             "coins": 20,
              "level": 0, "total_rank": ''})
 
     except Exception as e:
@@ -652,8 +699,8 @@ def callback_query_handler(call):
         users_coll.insert_one(
             {"_id": call.from_user.id, "first_name": call.from_user.first_name, "total_point": 0,
              "coins": 20,
-             "level": 0,
-             "total_rank": ''})
+             "level": 0, "total_rank": ''})
+
     except Exception as e:
         print(e)
     if 'total ranking' == call.data:
@@ -661,11 +708,13 @@ def callback_query_handler(call):
             types.InlineKeyboardButton('رنکینگ هفت روز اخیر', callback_data="seven ranking"),
             types.InlineKeyboardButton('رنکینگ کل', callback_data="total ranking"))
 
-        text = get_total_ranking(
-            users_coll.find({}, {"first_name": 1, "total_point": 1, "total_rank": 1}).sort("total_point", -1).limit(50))
+        text = get_total_ranking(users_coll.find({}).sort("total_point", -1))
 
         bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id, text=text,
                               reply_markup=markup)
+    elif call.data == 'again single':
+        game_id = insert_game(call, "easy", "single")
+        single_player_sudoku(call, game_id)
     elif call.data == 'shop':
         bot.answer_callback_query(url='t.me/MiniSudokuBot?start=shop', callback_query_id=call.id)
     elif call.data == 'seven ranking':
@@ -675,7 +724,7 @@ def callback_query_handler(call):
 
         text = get_seven_ranking(games_coll.find(
             {"date": {"$gte": datetime.today().replace(microsecond=0) - timedelta(7)}, "mode": "multi"},
-            {"users": 1}).limit(50))
+            {"users": 1}))
 
         bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id, text=text,
                               reply_markup=markup)
@@ -709,35 +758,27 @@ def callback_query_handler(call):
             print(e)
 
     elif 'jump' in call.data or 'broom' in call.data:
-
         split = call.data.split("/")
         game_id = ObjectId(split[1])
         data = split[0]
-        user_id = call.from_user.id
-        user = users_coll.find_one({"_id": user_id})
+        user_id = str(call.from_user.id)
+        user = users_coll.find_one({"_id": int(user_id)})
         game = games_coll.find_one({"_id": game_id})
         randomized_sudoku = game["randomized_sudoku"]
         sudoku = game["sudoku"]
-        if user_id not in game["users"]:
+        if len(game["users"]) == 1 and get_element(user_id, game["users"], "user_id") is not None:
+            bot.answer_callback_query(call.id, "اول دیگر بازیکنان باید شروع کنند!")
+            return
+        if get_element(user_id, game["users"], "user_id") is None:
             games_coll.update_one({"_id": game_id}, {
-                "$set": {"users." + user_id: {"moves": [], "username": call.from_user.first_name, "jump": 0,
-                                              "broom": 0, "use_broom": 0}}})
-            hardness = games_coll.find_one({"_id": game_id})["type"]
-            if hardness == 'easy':
-                hardness = 'آسان'
-            elif hardness == 'medium':
-                hardness = 'متوسط'
-            else:
-                hardness = 'سخت'
-            text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 سطح " + hardness + "\n\n🔰امتیازات\n" + create_text(
-                games_coll.find_one({"_id": game_id})["users"]) + '\n🤖@MiniSudokuBot'
-            if len(games_coll.find_one({"_id": game_id})["users"]) == 2:
-                bot.edit_message_text(text=text, inline_message_id=call.inline_message_id,
-                                      reply_markup=create_keyboards(randomized_sudoku, str(game_id)))
+                "$push": {"users": {"user_id": user_id, "jump": False,
+                                    "broom": False, "use_broom": False}}})
+            moves_coll.insert_one({"game_id": game_id, "user_id": user_id, "moves": []})
             game = games_coll.find_one({"_id": game_id})
-        if (game["users"][str(user_id)]["jump"] == 1 and data == 'jump') or (
-                game["users"][str(user_id)]["broom"] == 1 and data == 'broom' and game["users"][str(user_id)][
-            "use_broom"] == 0):
+        game_user = get_element(user_id, game["users"], "user_id")
+        if (game_user["jump"] and data == 'jump') or (
+                game_user["broom"] and data == 'broom' and not game_user[
+            "use_broom"]):
             bot.answer_callback_query(text='شما قبلا از این آیتم استفاده کرده اید.', callback_query_id=call.id)
             return
         if user["coins"] < 5:
@@ -753,32 +794,30 @@ def callback_query_handler(call):
             i = index // 6
             j = index % 6
             call.data = 'n' + str(sudoku[i][j]) + "/" + str(game_id)
-            length = len(game["users"][str(user_id)]["moves"])
-            moves = game["users"][str(user_id)]["moves"]
-            games_coll.update_one({"_id": game_id}, {"$set": {"users." + str(call.from_user.id) + ".jump": 1}})
-            if len(moves) == 0 or moves[length - 1]["n"] != 0:
-                games_coll.update_one({"_id": game_id},
-                                      {"$push": {
-                                          "users." + str(call.from_user.id) + ".moves": {"i": i,
-                                                                                         "j": j,
-                                                                                         "n": 0,
-                                                                                         "point": 0
-                                                                                         }}})
+            moves = moves_coll.find_one({"game_id": game_id, "user_id": user_id})["moves"]
+            length = len(moves)
+            games_coll.update_one({"_id": game_id, "users.user_id": str(call.from_user.id)},
+                                  {"$set": {"users.$.jump": True}})
+            if len(moves) == 0 or moves[- 1]["n"] != 0:
+                moves_coll.update_one({"game_id": game_id, "user_id": str(call.from_user.id)},
+                                      {"$push": {"moves": {"i": i,
+                                                           "j": j,
+                                                           "n": 0,
+                                                           "point": 0
+                                                           }}})
             else:
-                games_coll.update_one({"_id": game_id},
-                                      {"$set": {
-                                          "users." + str(call.from_user.id) + ".moves." + str(length - 1): {
-                                              "i": i,
-                                              "j": j,
-                                              "n": 0,
-                                              "point": 0
-
-                                          }
-                                      }})
+                moves_coll.update_one({"game_id": game_id, "user_id": str(call.from_user.id)},
+                                      {"$set": {"moves." + str(length - 1): {
+                                          "i": i,
+                                          "j": j,
+                                          "n": 0,
+                                          "point": 0
+                                      }}})
             users_coll.update_one({"_id": call.from_user.id}, {"$inc": {"coins": -5}})
         elif data == 'broom':
-            games_coll.update_one({"_id": game_id}, {"$set": {"users." + str(call.from_user.id) + ".broom": 1,
-                                                              "users." + str(call.from_user.id) + ".use_broom": 1}})
+            games_coll.update_one({"_id": game_id, "users.user_id": str(call.from_user.id)},
+                                  {"$set": {"users.$.broom": True,
+                                            "users.$.use_broom": True}})
             bot.answer_callback_query(call.id, 'حالا یک خونه رو انتخاب کن!')
 
     if re.search(r's[0-5][0-5]', call.data) or re.search(r'n[1-6]', call.data):
@@ -790,11 +829,12 @@ def callback_query_handler(call):
         randomized_sudoku = doc["randomized_sudoku"]
         # print_sudoku(randomized_sudoku)
         if doc["mode"] == "multi":
-            if user_id not in doc["users"]:
+            if get_element(user_id, doc["users"], "user_id") is None:
                 games_coll.update_one({"_id": game_id}, {
-                    "$set": {"users." + user_id: {"moves": [], "username": call.from_user.first_name, "jump": 0,
-                                                  "broom": 0, "use_broom": 0}}})
-                hardness = games_coll.find_one({"_id": game_id})["type"]
+                    "$push": {"users": {"user_id": user_id, "jump": False,
+                                        "broom": False, "use_broom": False}}})
+                moves_coll.insert_one({"game_id": game_id, "user_id": user_id, "moves": []})
+                hardness = doc["type"]
                 if hardness == 'easy':
                     hardness = 'آسان'
                 elif hardness == 'medium':
@@ -802,20 +842,15 @@ def callback_query_handler(call):
                 else:
                     hardness = 'سخت'
                 text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 سطح " + hardness + "\n\n🔰امتیازات\n" + create_text(
-                    games_coll.find_one({"_id": game_id})["users"]) + '\n🤖@MiniSudokuBot'
-                if len(games_coll.find_one({"_id": game_id})["users"]) == 2:
-                    bot.edit_message_text(text=text, inline_message_id=call.inline_message_id,
-                                          reply_markup=create_keyboards(randomized_sudoku, str(game_id)))
+                    games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
+                bot.edit_message_text(text=text, inline_message_id=call.inline_message_id,
+                                      reply_markup=create_keyboards(randomized_sudoku, str(game_id)))
                 doc = games_coll.find_one({"_id": game_id})
             if len(doc["users"]) == 1:
                 bot.answer_callback_query(call.id, "اول دیگر بازیکنان باید شروع کنند!")
                 return
-        status = doc["is_complete"]
-        moves = games_coll.find_one({"_id": game_id})["users"][str(call.from_user.id)]["moves"]
+        moves = moves_coll.find_one({"game_id": game_id, "user_id": str(call.from_user.id)})["moves"]
         length = len(moves)
-        if status == 1:
-            bot.answer_callback_query(call.id, "بازی تمام شده است!")
-            return
         sudoku = doc["sudoku"]
         if re.search(r's[0-5][0-5]', call.data):
             soduku_id = str(call.data).split("/")[0]
@@ -825,54 +860,52 @@ def callback_query_handler(call):
                 return
             else:
                 if length == 0:
-                    games_coll.update_one({"_id": game_id},
-                                          {"$push": {
-                                              "users." + str(call.from_user.id) + ".moves": {"i": indices[0],
-                                                                                             "j": indices[1],
-                                                                                             "n": 0,
-                                                                                             "point": 0
-                                                                                             }}})
-                elif moves[length - 1]["n"] == 0:
-                    games_coll.update_one({"_id": game_id},
-                                          {"$set": {
-                                              "users." + str(call.from_user.id) + ".moves." + str(length - 1): {
-                                                  "i": indices[0],
-                                                  "j": indices[1],
-                                                  "n": 0,
-                                                  "point": 0
-
-                                              }
-                                          }})
+                    moves_coll.update_one({"game_id": game_id, "user_id": str(call.from_user.id)}, {"$push": {"moves": {
+                        "i": indices[0],
+                        "j": indices[1],
+                        "n": 0,
+                        "point": 0
+                    }}})
+                elif moves[-1]["n"] == 0:
+                    moves_coll.update_one({"game_id": game_id, "user_id": str(call.from_user.id)}, {"$set": {
+                        "moves." + str(length - 1): {
+                            "i": indices[0],
+                            "j": indices[1],
+                            "n": 0,
+                            "point": 0
+                        }
+                    }})
                 else:
-                    games_coll.update_one({"_id": game_id},
-                                          {"$push": {
-                                              "users." + str(call.from_user.id) + ".moves": {"i": indices[0],
-                                                                                             "j": indices[1],
-                                                                                             "n": 0,
-                                                                                             "point": 0
-                                                                                             }}})
-                if doc["users"][str(call.from_user.id)]["broom"] == 1 and doc["users"][str(call.from_user.id)][
-                    "use_broom"] == 1:
+                    moves_coll.update_one({"game_id": game_id, "user_id": str(call.from_user.id)}, {"$push": {
+                        "moves": {
+                            "i": indices[0],
+                            "j": indices[1],
+                            "n": 0,
+                            "point": 0
+                        }
+                    }})
+                game_user = get_element(user_id, doc["users"], "user_id")
+                if game_user["broom"] and game_user["use_broom"]:
                     call.data = 'n' + str(sudoku[indices[0]][indices[1]]) + '/' + str(soduku_id)
-                    games_coll.update_one({"_id": game_id},
-                                          {"$set": {"users." + str(call.from_user.id) + ".use_broom": 0}})
+                    games_coll.update_one({"_id": game_id, "users.user_id": str(call.from_user.id)},
+                                          {"$set": {"users.$.use_broom": False}})
                     users_coll.update_one({"_id": call.from_user.id}, {"$inc": {"coins": -5}})
                 else:
                     bot.answer_callback_query(call.id, "حالا عدد مورد نظرت رو انتخاب کن")
         if re.search(r'n[1-6]', call.data):
-            moves = games_coll.find_one({"_id": game_id})["users"][str(call.from_user.id)]["moves"]
+            moves = moves_coll.find_one({"game_id": game_id, "user_id": str(call.from_user.id)})["moves"]
             length = len(moves)
             if length == 0:
                 bot.answer_callback_query(call.id, "شما هنوز خانه ای انتخاب نکردید!")
                 return
-            elif moves[length - 1]["n"] != 0:
+            elif moves[- 1]["n"] != 0:
                 bot.answer_callback_query(call.id, "شما هنوز خانه ای انتخاب نکردید!")
-            elif moves[length - 1]["n"] == 0:
+            elif moves[- 1]["n"] == 0:
                 numbers_id = str(call.data).split("/")[0]
                 number = re.sub(r'n', '', numbers_id)
                 number = int(number)
-                i = moves[length - 1]["i"]
-                j = moves[length - 1]["j"]
+                i = moves[- 1]["i"]
+                j = moves[- 1]["j"]
                 if randomized_sudoku[i][j] != 0:
                     bot.answer_callback_query(call.id, 'این خانه خالی نیست!')
                 elif randomized_sudoku[i][j] == 0 and sudoku[i][j] == number:
@@ -882,30 +915,26 @@ def callback_query_handler(call):
                     if length != 0:
                         for k in moves:
                             point += k["point"]
-                    games_coll.update_one({"_id": game_id},
-                                          {"$set": {
-                                              "users." + str(call.from_user.id) + ".moves." + str(length - 1): {
-                                                  "i": i,
-                                                  "j": j,
-                                                  "n": number,
-                                                  "point": 3
-                                              }
-                                          }})
+                    moves_coll.update_one({"game_id": game_id, "user_id": str(call.from_user.id)},
+                                          {"$set": {"moves." + str(length - 1): {
+                                              "i": i,
+                                              "j": j,
+                                              "n": number,
+                                              "point": 3
+                                          }}})
                     if randomized_sudoku == sudoku:
-                        print('ended!')
+                        games_coll.update_one({"_id": game_id},
+                                              {"$set": {"is_complete": True}})
                         if doc["mode"] == 'single':
                             text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 بازی انفرادی" + "\n\n🇮🇷پایان بازی🇮🇷\n" + create_text(
-                                games_coll.find_one({"_id": game_id})["users"]) + '\n🤖@MiniSudokuBot'
+                                games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
                             bot.edit_message_text(text,
                                                   call.from_user.id,
                                                   call.message.message_id,
-                                                  reply_markup=create_finish_keyboards(sudoku))
-                            status = 1
-                            games_coll.update_one({"_id": game_id},
-                                                  {"$set": {"status": status}})
+                                                  reply_markup=create_finish_keyboards(sudoku, 'single'))
+
                         else:
                             hardness = games_coll.find_one({"_id": game_id})["type"]
-                            print('ended!-1 ' + str(game_id))
                             if hardness == 'easy':
                                 hardness = 'آسان'
                             elif hardness == 'medium':
@@ -914,37 +943,35 @@ def callback_query_handler(call):
                                 hardness = 'سخت'
                             points = {}
                             game = games_coll.find_one({"_id": game_id})
-                            print('ended!-2 ' + str(game_id))
                             for i in game["users"]:
-                                if len(game["users"][i]["moves"]) == 0:
-                                    points[game["users"][i]["username"]] = 0
+                                moves = moves_coll.find_one({"game_id": game_id, "user_id": i["user_id"]})["moves"]
+                                username = users_coll.find_one({"_id": int(i["user_id"])})["first_name"]
+                                if len(moves) == 0:
+                                    points[username] = 0
                                 else:
                                     point = 0
-                                    for x in game["users"][i]["moves"]:
+                                    for x in moves:
                                         point += x["point"]
-                                    points[game["users"][i]["username"]] = point
-                            print('ended!-3 ' + str(game_id))
+                                    points[username] = point
                             points = dict(sorted(points.items(), key=lambda x: x[1], reverse=True))
                             text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 سطح " + hardness + "\n\n🇮🇷پایان بازی🇮🇷\n" + create_text(
-                                games_coll.find_one({"_id": game_id})["users"]) + '\n🏆 این بازی با برتری ' + \
+                                games_coll.find_one({"_id": game_id})["users"],
+                                str(game_id)) + '\n🏆 این بازی با برتری ' + \
                                    list(points.keys())[0] + ' به پایان رسید👏🕺💃\n🤖@MiniSudokuBot'
-                            print('ended!-4 ' + str(game_id))
                             update_profiles(games_coll.find_one({"_id": game_id})["users"], game_id)
-                            print('ended!-5 ' + str(game_id))
                             bot.edit_message_text(text=text, inline_message_id=call.inline_message_id,
-                                                  reply_markup=create_finish_keyboards(sudoku))
-                            print('ended!-6 ' + str(game_id))
+                                                  reply_markup=create_finish_keyboards(sudoku, 'multi'))
                     else:
                         if doc["mode"] == 'single':
                             text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 بازی انفرادی" + "\n\n🔰امتیازات\n" + create_text(
-                                games_coll.find_one({"_id": game_id})["users"]) + '\n🤖@MiniSudokuBot'
+                                games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
                             bot.edit_message_text(text=
                                                   text,
                                                   chat_id=call.from_user.id,
                                                   message_id=call.message.message_id,
                                                   reply_markup=create_keyboards(randomized_sudoku, str(game_id)))
                         else:
-                            hardness = games_coll.find_one({"_id": game_id})["type"]
+                            hardness = doc["type"]
                             if hardness == 'easy':
                                 hardness = 'آسان'
                             elif hardness == 'medium':
@@ -952,7 +979,7 @@ def callback_query_handler(call):
                             else:
                                 hardness = 'سخت'
                             text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 سطح " + hardness + "\n\n🔰امتیازات\n" + create_text(
-                                games_coll.find_one({"_id": game_id})["users"]) + '\n🤖@MiniSudokuBot'
+                                games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
                             bot.edit_message_text(text=text, inline_message_id=call.inline_message_id,
                                                   reply_markup=create_keyboards(randomized_sudoku, str(game_id)))
                         bot.answer_callback_query(call.id, "آفرین!👍")
@@ -962,23 +989,37 @@ def callback_query_handler(call):
                     if length != 0:
                         for k in moves:
                             point += k["point"]
-                    games_coll.update_one({"_id": game_id},
-                                          {"$set": {
-                                              "users." + str(call.from_user.id) + ".moves." + str(length - 1): {
-                                                  "i": i,
-                                                  "j": j,
-                                                  "n": number,
-                                                  "point": -2
-                                              }
-                                          }})
+                    moves_coll.update_one({"game_id": game_id, "user_id": str(call.from_user.id)},
+                                          {"$set": {"moves." + str(length - 1): {
+                                              "i": i,
+                                              "j": j,
+                                              "n": number,
+                                              "point": -2
+                                          }}})
+                    if doc["mode"] == 'single':
+                        text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 بازی انفرادی" + "\n\n🔰امتیازات\n" + create_text(
+                            games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
+                        bot.edit_message_text(text=
+                                              text,
+                                              chat_id=call.from_user.id,
+                                              message_id=call.message.message_id,
+                                              reply_markup=create_keyboards(randomized_sudoku, str(game_id)))
+                    else:
+                        hardness = doc["type"]
+                        if hardness == 'easy':
+                            hardness = 'آسان'
+                        elif hardness == 'medium':
+                            hardness = 'متوسط'
+                        else:
+                            hardness = 'سخت'
+                        text = "🔢 مینی سودوکو 🔢\n\n📚قراردادن اعداد 1 تا 6 در جدول بدون تکرار در سطر، ستون و مستطیل مشخص شده\n💎 سطح " + hardness + "\n\n🔰امتیازات\n" + create_text(
+                            games_coll.find_one({"_id": game_id})["users"], str(game_id)) + '\n🤖@MiniSudokuBot'
+                        bot.edit_message_text(text=text, inline_message_id=call.inline_message_id,
+                                              reply_markup=create_keyboards(randomized_sudoku, str(game_id)))
                     bot.answer_callback_query(call.id, "واای😢")
 
 
-
-
-
-bot.polling()
-
-
+while True:
+    bot.polling()
 
 
