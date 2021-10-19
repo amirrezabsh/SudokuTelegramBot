@@ -17,12 +17,6 @@
 *** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
 *** https://www.markdownguide.org/basic-syntax/#reference-style-links
 -->
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
 
 
 
@@ -33,19 +27,19 @@
     <img src="images/logo.png" alt="Logo" width="80" height="80">
   </a>
 
-<h3 align="center">project_title</h3>
+<h3 align="center">MiniSudoku 6x6</h3>
 
   <p align="center">
-    project_description
+    Sudoku game bot
     <br />
-    <a href="https://github.com/github_username/repo_name"><strong>Explore the docs »</strong></a>
+    <a href="https://github.com/amirrezabsh/SudokuTelegramBot"><strong>Explore the docs »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/github_username/repo_name">View Demo</a>
+    <a href="https://github.com/amirrezabsh/SudokuTelegramBot">View Demo</a>
     ·
-    <a href="https://github.com/github_username/repo_name/issues">Report Bug</a>
+    <a href="https://github.com/amirrezabsh/SudokuTelegramBot/issues">Report Bug</a>
     ·
-    <a href="https://github.com/github_username/repo_name/issues">Request Feature</a>
+    <a href="https://github.com/amirrezabsh/SudokuTelegramBot/issues">Request Feature</a>
   </p>
 </div>
 
@@ -82,9 +76,8 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
+[![Product Name Screen Shot][product-screenshot]](https://t.me/MiniSudokuBot)
 
-Here's a blank template to get started: To avoid retyping too much info. Do a search and replace with your text editor for the following: `github_username`, `repo_name`, `twitter_handle`, `linkedin_username`, `email`, `email_client`, `project_title`, `project_description`
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -92,14 +85,8 @@ Here's a blank template to get started: To avoid retyping too much info. Do a se
 
 ### Built With
 
-* [Next.js](https://nextjs.org/)
-* [React.js](https://reactjs.org/)
-* [Vue.js](https://vuejs.org/)
-* [Angular](https://angular.io/)
-* [Svelte](https://svelte.dev/)
-* [Laravel](https://laravel.com)
-* [Bootstrap](https://getbootstrap.com)
-* [JQuery](https://jquery.com)
+* [pyTelegramBotAPI](https://github.com/eternnoir/pyTelegramBotAPI)
+* [Python](https://www.python.org)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -108,32 +95,45 @@ Here's a blank template to get started: To avoid retyping too much info. Do a se
 <!-- GETTING STARTED -->
 ## Getting Started
 
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
+Just create a python project by create a virtual environment and place main.py file in your project to run.
+Place your bot api_key and host info in code as well.
 
 ### Prerequisites
 
-This is an example of how to list things you need to use the software and how to install them.
-* npm
+For installing virtual environment you should install virtualenv.
+* pip
   ```sh
-  npm install npm@latest -g
+  pip install virtualenv
+  ```
+
+For installing telegram bot api you should install pytelegrambotapi.
+* pip
+  ```sh
+  pip install pyTelegramBotAPI
+  ```
+
+For installing mongodb you should install mongodb.
+* pip
+  ```sh
+  pip install mongodb
   ```
 
 ### Installation
 
-1. Get a free API Key at [https://example.com](https://example.com)
+1. Get a free API Key at telegram bot father [https://t.me/BotFather](https://t.me/BotFather)
 2. Clone the repo
    ```sh
-   git clone https://github.com/github_username/repo_name.git
+   git clone https://github.com/amirrezabsh/SudokuTelegramBot.git
    ```
-3. Install NPM packages
+3. Create a virtual environment
    ```sh
-   npm install
+   virtualenv mypython
    ```
-4. Enter your API in `config.js`
-   ```js
-   const API_KEY = 'ENTER YOUR API';
+4. Activate your virtual environment
+   ```sh
+   mypthon\Scripts\activate
    ```
+5. Place your API_KEY and host info and then run the code :)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -142,9 +142,15 @@ This is an example of how to list things you need to use the software and how to
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
+After you runned the code and didn't catch any errors. You can go to your bot and send `/start` command and then you can see the menu and play with the bot.
+The menu I am talking about should be like this:
 
-_For more examples, please refer to the [Documentation](https://example.com)_
+<img src="images/menu.png" alt="menu">
+
+
+<i
+
+_For more examples, please refer to the [Documentation](https://github.com/eternnoir/pyTelegramBotAPI)_
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -153,12 +159,11 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 <!-- ROADMAP -->
 ## Roadmap
 
-- [] Feature 1
-- [] Feature 2
-- [] Feature 3
-    - [] Nested Feature
+- [] Only persian language support
+- [] Multiplayer Mode
+- [] Using MongoDB as database
 
-See the [open issues](https://github.com/github_username/repo_name/issues) for a full list of proposed features (and known issues).
+See the [open issues](https://github.com/amirrezabsh/SudokuTelegramBot/issues) for a full list of proposed features (and known issues).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -167,7 +172,7 @@ See the [open issues](https://github.com/github_username/repo_name/issues) for a
 <!-- CONTRIBUTING -->
 ## Contributing
 
-Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+Please feel free to fork this project and work on it, for any new awesome features I am **greatly appreciated**.
 
 If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
 Don't forget to give the project a star! Thanks again!
@@ -185,7 +190,7 @@ Don't forget to give the project a star! Thanks again!
 <!-- LICENSE -->
 ## License
 
-Distributed under the MIT License. See `LICENSE.txt` for more information.
+Distributed under the GNU License. See `LICENSE.txt` for more information.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -194,9 +199,9 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 <!-- CONTACT -->
 ## Contact
 
-Your Name - [@twitter_handle](https://twitter.com/twitter_handle) - email@email_client.com
+Your Name - [@amirrezabsh](https://twitter.com/amirrezabsh) - amirrezabsh79@gmail.com
 
-Project Link: [https://github.com/github_username/repo_name](https://github.com/github_username/repo_name)
+Project Link: [https://github.com/amirrezabsh/SudokuTelegramBot](https://github.com/amirrezabsh/SudokuTelegramBot)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -205,9 +210,9 @@ Project Link: [https://github.com/github_username/repo_name](https://github.com/
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-* []()
-* []()
-* []()
+* [https://github.com/eternnoir/pyTelegramBotAPI](https://github.com/eternnoir/pyTelegramBotAPI)
+* [https://www.python.org/doc/](https://www.python.org/doc/)
+* [https://docs.mongodb.com/](https://docs.mongodb.com/)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -215,16 +220,16 @@ Project Link: [https://github.com/github_username/repo_name](https://github.com/
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/github_username/repo_name.svg?style=for-the-badge
-[contributors-url]: https://github.com/github_username/repo_name/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/github_username/repo_name.svg?style=for-the-badge
-[forks-url]: https://github.com/github_username/repo_name/network/members
-[stars-shield]: https://img.shields.io/github/stars/github_username/repo_name.svg?style=for-the-badge
-[stars-url]: https://github.com/github_username/repo_name/stargazers
-[issues-shield]: https://img.shields.io/github/issues/github_username/repo_name.svg?style=for-the-badge
-[issues-url]: https://github.com/github_username/repo_name/issues
-[license-shield]: https://img.shields.io/github/license/github_username/repo_name.svg?style=for-the-badge
-[license-url]: https://github.com/github_username/repo_name/blob/master/LICENSE.txt
+[contributors-shield]: https://img.shields.io/github/contributors/amirrezabsh/SudokuTelegramBot.svg?style=for-the-badge
+[contributors-url]: https://github.com/amirrezabsh/SudokuTelegramBot/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/amirrezabsh/SudokuTelegramBot.svg?style=for-the-badge
+[forks-url]: https://github.com/amirrezabsh/SudokuTelegramBot/network/members
+[stars-shield]: https://img.shields.io/github/stars/amirrezabsh/SudokuTelegramBot.svg?style=for-the-badge
+[stars-url]: https://github.com/amirrezabsh/SudokuTelegramBot/stargazers
+[issues-shield]: https://img.shields.io/github/issues/amirrezabsh/SudokuTelegramBot.svg?style=for-the-badge
+[issues-url]: https://github.com/amirrezabsh/SudokuTelegramBot/issues
+[license-shield]: https://img.shields.io/github/license/amirrezabsh/SudokuTelegramBot.svg?style=for-the-badge
+[license-url]: https://github.com/amirrezabsh/SudokuTelegramBot/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com/in/linkedin_username
+[linkedin-url]: https://linkedin.com/in/amirrezabsh
 [product-screenshot]: images/screenshot.png
